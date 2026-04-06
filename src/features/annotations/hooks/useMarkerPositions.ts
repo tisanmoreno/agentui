@@ -5,6 +5,10 @@ import { clamp } from "~src/shared/dom"
 
 import { buildRectSnapshot } from "~src/features/annotations/target-snapshot"
 import type { Annotation, RectSnapshot } from "~src/features/annotations/types"
+import {
+  extractElementLabel,
+  normalizeStoredLabel
+} from "~src/utils/target-metadata"
 
 const MARKER_SIZE = 28
 const MARKER_GAP = 8
@@ -16,10 +20,11 @@ export interface MarkerPosition {
 
 export interface ResolvedAnnotation {
   annotation: Annotation
-  index: number
+  displayLabel: string | null
   element: Element | null
-  rect: RectSnapshot | null
+  index: number
   markerPosition: MarkerPosition | null
+  rect: RectSnapshot | null
   unresolved: boolean
 }
 
@@ -73,10 +78,14 @@ const buildResolvedAnnotations = (
 
     return {
       annotation,
-      index,
+      displayLabel:
+        (element ? extractElementLabel(element).label : null) ??
+        normalizeStoredLabel(annotation.target.label) ??
+        annotation.target.selector,
       element,
-      rect,
+      index,
       markerPosition: rect ? getMarkerPosition(rect) : null,
+      rect,
       unresolved: !element
     }
   })

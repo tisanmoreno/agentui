@@ -31,6 +31,8 @@ Not yet exposed in the UI on this branch:
 - [ ] Enable **Developer mode**.
 - [ ] Click **Load unpacked** and select `build/chrome-mv3-dev`.
 - [ ] Confirm the AgentUI extension card loads without manifest errors.
+- [ ] Click the pinned AgentUI extension button once and confirm the overlay hides on the current tab.
+- [ ] Click it again and confirm the overlay shows again on the current tab.
 
 ## 3. Smoke test on a local page
 

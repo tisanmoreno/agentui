@@ -34,7 +34,7 @@ export const MarkerLayer = ({
         const markerProps: MarkerProps = {
           active: resolvedAnnotation.annotation.id === activeAnnotationId,
           label:
-            resolvedAnnotation.annotation.target.label ??
+            resolvedAnnotation.displayLabel ??
             resolvedAnnotation.annotation.target.selector ??
             "Annotation target",
           number: resolvedAnnotation.index + 1,

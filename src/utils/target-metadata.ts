@@ -33,9 +33,41 @@ export interface ContextResult {
 const MAX_LABEL_LENGTH = 80
 const MAX_CONTEXT_LENGTH = 180
 const NEARBY_TEXT_MAX_LENGTH = 320
+const HEADING_SELECTORS =
+  "h1, h2, h3, h4, h5, h6, legend, caption, summary, [role='heading']"
+const INTERACTIVE_SELECTORS =
+  "button, a[href], [role='button'], [role='link'], input, select, textarea"
+const FORM_CONTROL_SELECTORS = "input, textarea, select"
 const CARD_LIKE_CLASS_PATTERN = /(?:card|panel|modal|dialog|sheet|tile|item|row|section)/i
+const LEGACY_ROLE_LABEL_PATTERN = /^([a-z][a-z0-9-]*)\s+"(.+)"$/i
 
-const normalizeWhitespace = (value: string) => value.trim().replace(/\s+/g, " ")
+const GENERIC_CONTAINER_ROLES = new Set([
+  "div",
+  "section",
+  "article",
+  "main",
+  "aside",
+  "header",
+  "footer",
+  "nav",
+  "form",
+  "fieldset",
+  "span",
+  "li",
+  "ul",
+  "ol",
+  "group",
+  "region",
+  "presentation"
+])
+
+const normalizeWhitespace = (value: string) =>
+  value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Za-z])([0-9])/g, "$1 $2")
+    .replace(/([0-9])([A-Za-z])/g, "$1 $2")
+    .trim()
+    .replace(/\s+/g, " ")
 
 const truncate = (value: string, maxLength: number) => {
   if (value.length <= maxLength) {
@@ -44,6 +76,8 @@ const truncate = (value: string, maxLength: number) => {
 
   return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
 }
+
+const upperFirst = (value: string) => (value ? `${value[0].toUpperCase()}${value.slice(1)}` : value)
 
 const getMeaningfulText = (value: string | null | undefined, maxLength: number) => {
   if (!value) {
@@ -171,11 +205,11 @@ const getRoleLabel = (element: Element) => {
   }
 
   if (tagName === "a" && element.hasAttribute("href")) {
-    return "link"
+    return explicitRole || "link"
   }
 
   if (tagName === "input" || tagName === "textarea" || tagName === "select") {
-    return tagName
+    return explicitRole || tagName
   }
 
   return explicitRole || tagName
@@ -230,6 +264,54 @@ const getStableSemanticIdentity = (element: Element) => {
   return tagName
 }
 
+const getNearbyHeadingText = (element: Element) => {
+  let ancestor = element.parentElement
+  let depth = 0
+
+  while (ancestor && depth < 5) {
+    const tagName = ancestor.tagName.toLowerCase()
+    const isCardLike = Array.from(ancestor.classList).some((token) =>
+      CARD_LIKE_CLASS_PATTERN.test(token)
+    )
+
+    if (
+      ancestor.matches(
+        [
+          "label",
+          "fieldset",
+          "form",
+          "section",
+          "article",
+          "li",
+          "figure",
+          "table",
+          "[role='dialog']",
+          "[role='group']"
+        ].join(",")
+      ) ||
+      isCardLike
+    ) {
+      if (tagName === "nav" || tagName === "header" || tagName === "footer") {
+        ancestor = ancestor.parentElement
+        depth += 1
+        continue
+      }
+
+      const heading = ancestor.querySelector(HEADING_SELECTORS)
+      const headingText = getVisibleText(heading, MAX_LABEL_LENGTH)
+
+      if (headingText) {
+        return headingText
+      }
+    }
+
+    ancestor = ancestor.parentElement
+    depth += 1
+  }
+
+  return null
+}
+
 const getNearbyText = (element: Element, labelHint: string | null) => {
   const nearbySelectors = [
     "label",
@@ -249,7 +331,9 @@ const getNearbyText = (element: Element, labelHint: string | null) => {
 
   while (ancestor && depth < 5) {
     const tagName = ancestor.tagName.toLowerCase()
-    const isCardLike = Array.from(ancestor.classList).some((token) => CARD_LIKE_CLASS_PATTERN.test(token))
+    const isCardLike = Array.from(ancestor.classList).some((token) =>
+      CARD_LIKE_CLASS_PATTERN.test(token)
+    )
 
     if (ancestor.matches(nearbySelectors) || isCardLike) {
       if (tagName === "nav" || tagName === "header" || tagName === "footer") {
@@ -258,9 +342,7 @@ const getNearbyText = (element: Element, labelHint: string | null) => {
         continue
       }
 
-      const heading = ancestor.querySelector(
-        "h1, h2, h3, h4, h5, h6, legend, caption, summary, [role='heading']"
-      )
+      const heading = ancestor.querySelector(HEADING_SELECTORS)
       const headingText = getVisibleText(heading, MAX_CONTEXT_LENGTH)
 
       if (headingText && headingText !== labelHint) {
@@ -281,6 +363,126 @@ const getNearbyText = (element: Element, labelHint: string | null) => {
   return null
 }
 
+const getContainerDescriptor = (element: Element) => {
+  const tagName = element.tagName.toLowerCase()
+  const interactiveCount = element.querySelectorAll(INTERACTIVE_SELECTORS).length
+  const formControlCount = element.querySelectorAll(FORM_CONTROL_SELECTORS).length
+
+  if (tagName === "li") {
+    return "item"
+  }
+
+  if (tagName === "nav") {
+    return "navigation"
+  }
+
+  if (tagName === "form" || formControlCount > 0) {
+    return "form"
+  }
+
+  if (interactiveCount > 1) {
+    return "actions"
+  }
+
+  if (["section", "article", "main", "aside"].includes(tagName)) {
+    return "section"
+  }
+
+  return "group"
+}
+
+const appendDescriptor = (value: string | null, descriptor: string) => {
+  const normalizedValue = getMeaningfulText(value, MAX_LABEL_LENGTH)
+
+  if (!normalizedValue) {
+    return upperFirst(descriptor)
+  }
+
+  const normalizedLower = normalizedValue.toLowerCase()
+
+  if (normalizedLower === descriptor || normalizedLower.endsWith(` ${descriptor}`)) {
+    return normalizedValue
+  }
+
+  return truncate(`${normalizedValue} ${descriptor}`, MAX_LABEL_LENGTH)
+}
+
+const formatHumanLabel = (value: string | null, roleLabel: string) => {
+  const normalizedValue = getMeaningfulText(value, MAX_LABEL_LENGTH)
+
+  if (!normalizedValue) {
+    return null
+  }
+
+  const lowerRoleLabel = roleLabel.toLowerCase()
+
+  if (
+    normalizedValue.toLowerCase() === lowerRoleLabel ||
+    normalizedValue.toLowerCase().endsWith(` ${lowerRoleLabel}`)
+  ) {
+    return normalizedValue
+  }
+
+  return truncate(`${normalizedValue} ${lowerRoleLabel}`, MAX_LABEL_LENGTH)
+}
+
+const shouldUseDirectTextForContainerLabel = (element: Element, candidate: string | null) => {
+  if (!candidate) {
+    return false
+  }
+
+  if (candidate.length > 48) {
+    return false
+  }
+
+  if (element.childElementCount > 1) {
+    return false
+  }
+
+  if (element.querySelector(INTERACTIVE_SELECTORS)) {
+    return false
+  }
+
+  return true
+}
+
+const humanizeSemanticIdentity = (value: string) => {
+  const readableValue = value
+    .replace(/^[a-z]+[#.]/i, "")
+    .replace(/^[a-z]+\[/i, "")
+    .replace(/[\[\]="']/g, " ")
+    .replace(/[._:/\\-]+/g, " ")
+    .replace(/\b(?:data|testid|test|cy|aria|labelledby|label|name|type)\b/gi, " ")
+
+  return getMeaningfulText(readableValue, MAX_LABEL_LENGTH)
+}
+
+export const normalizeStoredLabel = (label: string | null) => {
+  const normalizedLabel = getMeaningfulText(label, MAX_LABEL_LENGTH)
+
+  if (!normalizedLabel) {
+    return null
+  }
+
+  const legacyMatch = normalizedLabel.match(LEGACY_ROLE_LABEL_PATTERN)
+
+  if (!legacyMatch) {
+    return normalizedLabel
+  }
+
+  const [, roleLabel, candidate] = legacyMatch
+
+  if (GENERIC_CONTAINER_ROLES.has(roleLabel.toLowerCase())) {
+    const normalizedCandidate = getMeaningfulText(candidate, MAX_LABEL_LENGTH)
+
+    return normalizedCandidate && normalizedCandidate.length <= 48
+      ? appendDescriptor(normalizedCandidate, "group")
+      : "Group"
+  }
+
+  return formatHumanLabel(candidate, roleLabel) ?? normalizedLabel
+}
+
 export const extractElementLabel = (
   element: Element,
   options: MetadataOptions = {}
@@ -297,19 +499,56 @@ export const extractElementLabel = (
     [getVisibleText(element, MAX_LABEL_LENGTH), "element-text"]
   ]
 
-  for (const [candidate, source] of labelCandidates) {
-    if (!candidate) {
-      continue
+  if (!GENERIC_CONTAINER_ROLES.has(roleLabel)) {
+    for (const [candidate, source] of labelCandidates) {
+      const nextLabel = formatHumanLabel(candidate, roleLabel)
+
+      if (!nextLabel) {
+        continue
+      }
+
+      return {
+        label: nextLabel,
+        source
+      }
+    }
+  } else {
+    for (const [candidate, source] of labelCandidates) {
+      if (!shouldUseDirectTextForContainerLabel(element, candidate)) {
+        continue
+      }
+
+      return {
+        label: appendDescriptor(candidate, getContainerDescriptor(element)),
+        source
+      }
     }
 
+    const nearbyHeadingText = getNearbyHeadingText(element)
+
+    if (nearbyHeadingText) {
+      return {
+        label: appendDescriptor(nearbyHeadingText, getContainerDescriptor(element)),
+        source: "semantic"
+      }
+    }
+  }
+
+  const semanticIdentity = humanizeSemanticIdentity(getStableSemanticIdentity(element))
+
+  if (semanticIdentity) {
     return {
-      label: `${roleLabel} "${truncate(candidate, MAX_LABEL_LENGTH - roleLabel.length - 3)}"`,
-      source
+      label: GENERIC_CONTAINER_ROLES.has(roleLabel)
+        ? appendDescriptor(semanticIdentity, getContainerDescriptor(element))
+        : formatHumanLabel(semanticIdentity, roleLabel),
+      source: "semantic"
     }
   }
 
   return {
-    label: truncate(getStableSemanticIdentity(element), MAX_LABEL_LENGTH),
+    label: GENERIC_CONTAINER_ROLES.has(roleLabel)
+      ? upperFirst(getContainerDescriptor(element))
+      : upperFirst(roleLabel),
     source: "semantic"
   }
 }

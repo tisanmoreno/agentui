@@ -27,6 +27,13 @@ import {
   TOOLBAR_OFFSET
 } from "~src/shared/constants"
 import { isTypingInEditableTarget } from "~src/shared/keyboard"
+import {
+  GET_OVERLAY_VISIBILITY_MESSAGE,
+  SET_OVERLAY_VISIBILITY_MESSAGE,
+  type GetOverlayVisibilityMessage,
+  type GetOverlayVisibilityResponse,
+  type SetOverlayVisibilityMessage
+} from "~src/shared/messages"
 import { AnnotationPopover } from "~src/ui/overlay/AnnotationPopover"
 import { HoverOutline } from "~src/ui/overlay/HoverOutline"
 import {
@@ -38,6 +45,10 @@ import { FeedbackToolbar } from "~src/ui/toolbar/FeedbackToolbar"
 
 const TOAST_DURATION_MS = 1800
 const MAX_VISIBLE_TOASTS = 3
+const PANEL_GAP = 12
+const DEFAULT_PANEL_TOP_OFFSET = TOOLBAR_OFFSET + 68
+const REVEAL_HIGHLIGHT_DURATION_MS = 1600
+const REVEAL_SCROLL_OFFSET = 96
 
 const overlayStyle: CSSProperties = {
   position: "fixed",
@@ -76,10 +87,18 @@ const createToastId = () => {
 export const OverlayShell = () => {
   const [feedbackModeEnabled, setFeedbackModeEnabled] = useState(false)
   const [markersVisible, setMarkersVisible] = useState(true)
+  const [overlayVisible, setOverlayVisible] = useState(true)
+  const [overlayVisibilityReady, setOverlayVisibilityReady] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [annotationPanelTopOffset, setAnnotationPanelTopOffset] = useState(
+    DEFAULT_PANEL_TOP_OFFSET
+  )
   const [popoverState, setPopoverState] = useState<PopoverState>(closedPopoverState)
+  const [revealedAnnotationId, setRevealedAnnotationId] = useState<string | null>(null)
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const toastTimersRef = useRef<Map<string, number>>(new Map())
+  const revealTimerRef = useRef<number | null>(null)
+  const toolbarRef = useRef<HTMLDivElement | null>(null)
   const {
     annotations,
     activeAnnotationId,
@@ -154,6 +173,11 @@ export const OverlayShell = () => {
         window.clearTimeout(timeoutId)
       })
       toastTimersRef.current.clear()
+
+      if (typeof revealTimerRef.current === "number") {
+        window.clearTimeout(revealTimerRef.current)
+        revealTimerRef.current = null
+      }
     }
   }, [])
 
@@ -166,8 +190,8 @@ export const OverlayShell = () => {
   }, [])
 
   const { hoveredTarget, clearHoveredTarget } = useTargetSelection({
-    enabled: feedbackModeEnabled,
-    paused: popoverState.open,
+    enabled: overlayVisibilityReady && overlayVisible && feedbackModeEnabled,
+    paused: !overlayVisibilityReady || !overlayVisible || popoverState.open,
     onSelectTarget: handleSelectTarget
   })
 
@@ -200,8 +224,11 @@ export const OverlayShell = () => {
       return popoverState.target.snapshot.label
     }
 
-    return popoverState.annotation.target.label
-  }, [popoverState])
+    return (
+      resolvedAnnotationsById.get(popoverState.annotation.id)?.displayLabel ??
+      popoverState.annotation.target.label
+    )
+  }, [popoverState, resolvedAnnotationsById])
 
   const handleClosePopover = useCallback(() => {
     setPopoverState(closedPopoverState)
@@ -223,6 +250,73 @@ export const OverlayShell = () => {
 
     setFeedbackModeEnabled(true)
   }, [exitFeedbackMode, feedbackModeEnabled])
+
+  const applyOverlayVisibility = useCallback(
+    (visible: boolean) => {
+      setOverlayVisible(visible)
+
+      if (visible) {
+        return
+      }
+
+      setPanelOpen(false)
+      setRevealedAnnotationId(null)
+      exitFeedbackMode()
+    },
+    [exitFeedbackMode]
+  )
+
+  useEffect(() => {
+    const handleRuntimeMessage = (message: unknown) => {
+      if (
+        !message ||
+        typeof message !== "object" ||
+        (message as { type?: string }).type !== SET_OVERLAY_VISIBILITY_MESSAGE
+      ) {
+        return
+      }
+
+      const { visible } = message as SetOverlayVisibilityMessage
+
+      if (typeof visible !== "boolean") {
+        return
+      }
+
+      applyOverlayVisibility(visible)
+    }
+
+    chrome.runtime.onMessage.addListener(handleRuntimeMessage)
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleRuntimeMessage)
+    }
+  }, [applyOverlayVisibility])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const message: GetOverlayVisibilityMessage = {
+      type: GET_OVERLAY_VISIBILITY_MESSAGE
+    }
+
+    chrome.runtime.sendMessage(message, (response?: GetOverlayVisibilityResponse) => {
+      if (cancelled) {
+        return
+      }
+
+      if (chrome.runtime.lastError) {
+        setOverlayVisibilityReady(true)
+        return
+      }
+
+      applyOverlayVisibility(response?.visible ?? true)
+      setOverlayVisibilityReady(true)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [applyOverlayVisibility])
 
   const canCopyAnnotations = useMemo(
     () => hasExportableAnnotations(annotations),
@@ -321,7 +415,75 @@ export const OverlayShell = () => {
     [addAnnotation, popoverState, updateAnnotation]
   )
 
+  const handleRevealAnnotationById = useCallback(
+    (annotationId: string) => {
+      const resolvedAnnotation = resolvedAnnotationsById.get(annotationId)
+
+      if (!resolvedAnnotation?.element) {
+        return
+      }
+
+      const rect = resolvedAnnotation.element.getBoundingClientRect()
+      const nextTop = Math.max(0, window.scrollY + rect.top - REVEAL_SCROLL_OFFSET)
+
+      window.scrollTo({
+        top: nextTop,
+        behavior: "smooth"
+      })
+
+      setRevealedAnnotationId(annotationId)
+
+      if (typeof revealTimerRef.current === "number") {
+        window.clearTimeout(revealTimerRef.current)
+      }
+
+      revealTimerRef.current = window.setTimeout(() => {
+        setRevealedAnnotationId((currentAnnotationId) =>
+          currentAnnotationId === annotationId ? null : currentAnnotationId
+        )
+        revealTimerRef.current = null
+      }, REVEAL_HIGHLIGHT_DURATION_MS)
+    },
+    [resolvedAnnotationsById]
+  )
+
   useEffect(() => {
+    if (!overlayVisibilityReady || !overlayVisible) {
+      return
+    }
+
+    const toolbarElement = toolbarRef.current
+
+    if (!toolbarElement) {
+      return
+    }
+
+    const updateAnnotationPanelTopOffset = () => {
+      const toolbarRect = toolbarElement.getBoundingClientRect()
+
+      setAnnotationPanelTopOffset(Math.round(toolbarRect.bottom + PANEL_GAP))
+    }
+
+    updateAnnotationPanelTopOffset()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateAnnotationPanelTopOffset()
+    })
+
+    resizeObserver.observe(toolbarElement)
+    window.addEventListener("resize", updateAnnotationPanelTopOffset)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener("resize", updateAnnotationPanelTopOffset)
+    }
+  }, [overlayVisibilityReady, overlayVisible])
+
+  useEffect(() => {
+    if (!overlayVisibilityReady || !overlayVisible) {
+      return
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing) {
         return
@@ -380,8 +542,19 @@ export const OverlayShell = () => {
     handleClosePopover,
     handleCopyAnnotations,
     handleToggleFeedbackMode,
+    overlayVisibilityReady,
+    overlayVisible,
     popoverState.open
   ])
+
+  const revealedAnnotationRect =
+    revealedAnnotationId !== null
+      ? resolvedAnnotationsById.get(revealedAnnotationId)?.rect ?? null
+      : null
+
+  if (!overlayVisibilityReady || !overlayVisible) {
+    return null
+  }
 
   return (
     <div
@@ -396,6 +569,7 @@ export const OverlayShell = () => {
             : null
         }
       />
+      <HoverOutline rect={revealedAnnotationRect} variant="reveal" />
       {markersVisible ? (
         <MarkerLayer
           activeAnnotationId={activeAnnotationId}
@@ -403,7 +577,7 @@ export const OverlayShell = () => {
           onEditAnnotation={handleEditAnnotation}
         />
       ) : null}
-      <div style={toolbarPositionStyle}>
+      <div ref={toolbarRef} style={toolbarPositionStyle}>
         <FeedbackToolbar
           annotationCount={annotations.length}
           canCopyAnnotations={canCopyAnnotations}
@@ -424,8 +598,10 @@ export const OverlayShell = () => {
         onDeleteAnnotation={(annotationId) => void deleteAnnotation(annotationId)}
         onEditAnnotation={handleEditAnnotationById}
         onMoveAnnotation={(fromIndex, toIndex) => void reorderAnnotations(fromIndex, toIndex)}
+        onRevealAnnotation={handleRevealAnnotationById}
         onToggleMarkers={() => setMarkersVisible((currentValue) => !currentValue)}
         open={panelOpen}
+        topOffset={annotationPanelTopOffset}
       />
       <AnnotationPopover
         anchorRect={anchorRect}

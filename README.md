@@ -74,6 +74,7 @@ http://localhost:3000
 6. Confirm the **AgentUI** extension card appears without manifest errors.
 7. Open your local page, such as `http://localhost:3000`.
 8. Confirm the floating AgentUI toolbar appears in the top-right corner.
+9. Optionally click the pinned AgentUI extension button to hide or show the overlay on the current tab.
 
 After code changes:
 
@@ -85,7 +86,7 @@ After code changes:
 
 ### 1. Start annotating
 
-Click **Start annotating** in the toolbar.
+If you hid the overlay, click the pinned AgentUI extension button to show it again on the current tab. Then click **Start annotating** in the toolbar.
 
 ### 2. Pick a target
 

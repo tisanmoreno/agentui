@@ -7,15 +7,13 @@ import type { ResolvedAnnotation } from "~src/features/annotations/hooks/useMark
 
 const panelStyle: CSSProperties = {
   position: "fixed",
-  top: TOOLBAR_OFFSET + 68,
   right: TOOLBAR_OFFSET,
-  width: "min(360px, calc(100vw - 32px))",
-  maxHeight: "calc(100vh - 96px)",
+  width: "min(380px, calc(100vw - 32px))",
   display: "flex",
   flexDirection: "column",
-  gap: "16px",
+  gap: "14px",
   padding: "16px",
-  borderRadius: "20px",
+  borderRadius: "22px",
   border: "1px solid rgba(148, 163, 184, 0.18)",
   background: "rgba(15, 23, 42, 0.96)",
   boxShadow: "0 20px 48px rgba(15, 23, 42, 0.38)",
@@ -46,18 +44,26 @@ const titleStyle: CSSProperties = {
 
 const subtitleStyle: CSSProperties = {
   fontSize: "12px",
-  color: "rgba(226, 232, 240, 0.68)"
+  lineHeight: 1.45,
+  color: "rgba(226, 232, 240, 0.7)"
 }
 
-const headerActionsStyle: CSSProperties = {
+const controlsRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "10px",
+  flexWrap: "wrap"
+}
+
+const controlsLeftStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "8px",
-  flexWrap: "wrap",
-  justifyContent: "flex-end"
+  flexWrap: "wrap"
 }
 
-const buttonStyle: CSSProperties = {
+const baseButtonStyle: CSSProperties = {
   borderRadius: "999px",
   border: "1px solid rgba(148, 163, 184, 0.18)",
   background: "rgba(255, 255, 255, 0.06)",
@@ -68,15 +74,51 @@ const buttonStyle: CSSProperties = {
   cursor: "pointer"
 }
 
+const subtleButtonStyle: CSSProperties = {
+  ...baseButtonStyle,
+  background: "rgba(255, 255, 255, 0.03)"
+}
+
+const iconButtonStyle: CSSProperties = {
+  width: "34px",
+  height: "34px",
+  borderRadius: "999px",
+  border: "1px solid rgba(148, 163, 184, 0.18)",
+  background: "rgba(255, 255, 255, 0.03)",
+  color: "#e2e8f0",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
+  cursor: "pointer"
+}
+
+const tertiaryButtonStyle: CSSProperties = {
+  ...baseButtonStyle,
+  padding: "6px 10px",
+  fontSize: "11px",
+  fontWeight: 600,
+  borderColor: "rgba(148, 163, 184, 0.1)",
+  background: "rgba(255, 255, 255, 0.015)",
+  color: "rgba(226, 232, 240, 0.78)"
+}
+
 const activeButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  borderColor: "rgba(96, 165, 250, 0.7)",
-  background: "rgba(37, 99, 235, 0.18)",
-  color: "#dbeafe"
+  ...tertiaryButtonStyle,
+  borderColor: "rgba(96, 165, 250, 0.2)",
+  background: "rgba(37, 99, 235, 0.05)",
+  color: "rgba(191, 219, 254, 0.92)"
+}
+
+const tertiaryDestructiveButtonStyle: CSSProperties = {
+  ...tertiaryButtonStyle,
+  color: "rgba(254, 202, 202, 0.72)",
+  borderColor: "rgba(248, 113, 113, 0.1)",
+  background: "rgba(127, 29, 29, 0.03)"
 }
 
 const destructiveButtonStyle: CSSProperties = {
-  ...buttonStyle,
+  ...baseButtonStyle,
   color: "#fecaca",
   borderColor: "rgba(248, 113, 113, 0.22)",
   background: "rgba(127, 29, 29, 0.16)"
@@ -86,7 +128,7 @@ const listStyle: CSSProperties = {
   listStyle: "none",
   display: "flex",
   flexDirection: "column",
-  gap: "10px",
+  gap: "12px",
   margin: 0,
   padding: 0,
   overflowY: "auto"
@@ -95,9 +137,9 @@ const listStyle: CSSProperties = {
 const emptyStateStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "6px",
+  gap: "8px",
   padding: "20px",
-  borderRadius: "16px",
+  borderRadius: "18px",
   border: "1px dashed rgba(148, 163, 184, 0.2)",
   background: "rgba(15, 23, 42, 0.55)"
 }
@@ -110,7 +152,7 @@ const emptyTitleStyle: CSSProperties = {
 
 const emptyBodyStyle: CSSProperties = {
   fontSize: "12px",
-  lineHeight: 1.5,
+  lineHeight: 1.55,
   color: "rgba(226, 232, 240, 0.72)"
 }
 
@@ -118,35 +160,59 @@ const clearConfirmStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: "8px",
-  padding: "10px 12px",
-  borderRadius: "14px",
+  gap: "10px",
+  padding: "12px",
+  borderRadius: "16px",
   background: "rgba(127, 29, 29, 0.18)",
   border: "1px solid rgba(248, 113, 113, 0.22)"
 }
 
 const clearConfirmTextStyle: CSSProperties = {
   fontSize: "12px",
+  lineHeight: 1.45,
   color: "#fecaca"
 }
 
 const clearConfirmActionsStyle: CSSProperties = {
   display: "flex",
-  gap: "8px"
+  gap: "8px",
+  flexWrap: "wrap",
+  justifyContent: "flex-end"
 }
 
-const SCROLL_OFFSET = 96
+const closeIconStyle: CSSProperties = {
+  width: "16px",
+  height: "16px",
+  display: "block"
+}
+
+const CloseIcon = () => (
+  <svg
+    aria-hidden
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="2"
+    style={closeIconStyle}
+    viewBox="0 0 24 24">
+    <path d="M6 6l12 12" />
+    <path d="M18 6 6 18" />
+  </svg>
+)
 
 interface AnnotationPanelProps {
   activeAnnotationId: string | null
   annotations: ResolvedAnnotation[]
   markersVisible: boolean
   open: boolean
+  topOffset: number
   onClearAnnotations: () => void
   onClose: () => void
   onDeleteAnnotation: (annotationId: string) => void
   onEditAnnotation: (annotationId: string) => void
   onMoveAnnotation: (fromIndex: number, toIndex: number) => void
+  onRevealAnnotation: (annotationId: string) => void
   onToggleMarkers: () => void
 }
 
@@ -155,11 +221,13 @@ export const AnnotationPanel = ({
   annotations,
   markersVisible,
   open,
+  topOffset,
   onClearAnnotations,
   onClose,
   onDeleteAnnotation,
   onEditAnnotation,
   onMoveAnnotation,
+  onRevealAnnotation,
   onToggleMarkers
 }: AnnotationPanelProps) => {
   const [confirmingClearAll, setConfirmingClearAll] = useState(false)
@@ -172,6 +240,15 @@ export const AnnotationPanel = ({
   }, [open])
 
   const hasAnnotations = annotationCount > 0
+  const resolvedPanelStyle = useMemo<CSSProperties>(
+    () => ({
+      ...panelStyle,
+      top: topOffset,
+      maxHeight: `calc(100vh - ${Math.round(topOffset + TOOLBAR_OFFSET)}px)`
+    }),
+    [topOffset]
+  )
+
   const subtitle = useMemo(() => {
     if (!hasAnnotations) {
       return "Saved annotations will appear here."
@@ -187,54 +264,54 @@ export const AnnotationPanel = ({
   }
 
   return (
-    <aside aria-label="Saved annotations" style={panelStyle}>
+    <aside aria-label="Saved annotations" style={resolvedPanelStyle}>
       <div style={headerStyle}>
         <div style={titleWrapStyle}>
           <span style={titleStyle}>Annotations</span>
           <span style={subtitleStyle}>{subtitle}</span>
         </div>
-        <div style={headerActionsStyle}>
+        <button aria-label="Close annotations" onClick={onClose} style={iconButtonStyle} type="button">
+          <CloseIcon />
+        </button>
+      </div>
+
+      <div style={controlsRowStyle}>
+        <div style={controlsLeftStyle}>
           <button
             onClick={onToggleMarkers}
-            style={markersVisible ? activeButtonStyle : buttonStyle}
+            style={markersVisible ? activeButtonStyle : tertiaryButtonStyle}
             type="button">
             {markersVisible ? "Hide markers" : "Show markers"}
           </button>
-          <button onClick={onClose} style={buttonStyle} type="button">
-            Close
-          </button>
         </div>
+        {hasAnnotations && !confirmingClearAll ? (
+          <button
+            onClick={() => setConfirmingClearAll(true)}
+            style={tertiaryDestructiveButtonStyle}
+            type="button">
+            Clear all
+          </button>
+        ) : null}
       </div>
 
-      {hasAnnotations ? (
-        confirmingClearAll ? (
-          <div style={clearConfirmStyle}>
-            <span style={clearConfirmTextStyle}>Clear all annotations on this page?</span>
-            <div style={clearConfirmActionsStyle}>
-              <button onClick={() => setConfirmingClearAll(false)} style={buttonStyle} type="button">
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setConfirmingClearAll(false)
-                  onClearAnnotations()
-                }}
-                style={destructiveButtonStyle}
-                type="button">
-                Clear all
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={headerActionsStyle}>
+      {hasAnnotations && confirmingClearAll ? (
+        <div style={clearConfirmStyle}>
+          <span style={clearConfirmTextStyle}>Clear all annotations on this page?</span>
+          <div style={clearConfirmActionsStyle}>
+            <button onClick={() => setConfirmingClearAll(false)} style={subtleButtonStyle} type="button">
+              Cancel
+            </button>
             <button
-              onClick={() => setConfirmingClearAll(true)}
+              onClick={() => {
+                setConfirmingClearAll(false)
+                onClearAnnotations()
+              }}
               style={destructiveButtonStyle}
               type="button">
               Clear all
             </button>
           </div>
-        )
+        </div>
       ) : null}
 
       {hasAnnotations ? (
@@ -252,19 +329,7 @@ export const AnnotationPanel = ({
               onMoveUp={() =>
                 onMoveAnnotation(resolvedAnnotation.index, resolvedAnnotation.index - 1)
               }
-              onReveal={() => {
-                if (!resolvedAnnotation.element) {
-                  return
-                }
-
-                const rect = resolvedAnnotation.element.getBoundingClientRect()
-                const nextTop = Math.max(0, window.scrollY + rect.top - SCROLL_OFFSET)
-
-                window.scrollTo({
-                  top: nextTop,
-                  behavior: "smooth"
-                })
-              }}
+              onReveal={() => onRevealAnnotation(resolvedAnnotation.annotation.id)}
               resolvedAnnotation={resolvedAnnotation}
             />
           ))}
@@ -273,8 +338,8 @@ export const AnnotationPanel = ({
         <div style={emptyStateStyle}>
           <span style={emptyTitleStyle}>No saved annotations yet</span>
           <span style={emptyBodyStyle}>
-            Start annotating the page to save feedback. Saved items will stay ordered here,
-            and their marker numbers will follow the same order.
+            Start annotating the page to capture feedback. Notes will appear here in order,
+            and their marker numbers will stay in sync with the list.
           </span>
         </div>
       )}
