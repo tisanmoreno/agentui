@@ -80,20 +80,30 @@ const secondaryButtonStyle: CSSProperties = {
   ...baseButtonStyle,
   background: "rgba(255, 255, 255, 0.06)",
   borderColor: "rgba(148, 163, 184, 0.18)",
-  color: "rgba(248, 250, 252, 0.56)",
-  cursor: "not-allowed"
+  color: "#e2e8f0"
+}
+
+const activeSecondaryButtonStyle: CSSProperties = {
+  ...secondaryButtonStyle,
+  borderColor: "rgba(96, 165, 250, 0.7)",
+  background: "rgba(37, 99, 235, 0.18)",
+  color: "#dbeafe"
 }
 
 interface FeedbackToolbarProps {
   annotationCount: number
   feedbackModeEnabled: boolean
+  panelOpen: boolean
   onToggleFeedbackMode: () => void
+  onTogglePanel: () => void
 }
 
 export const FeedbackToolbar = ({
   annotationCount,
   feedbackModeEnabled,
-  onToggleFeedbackMode
+  panelOpen,
+  onToggleFeedbackMode,
+  onTogglePanel
 }: FeedbackToolbarProps) => {
   const countLabel = annotationCount === 1 ? "1 note" : `${annotationCount} notes`
 
@@ -114,8 +124,12 @@ export const FeedbackToolbar = ({
           type="button">
           {feedbackModeEnabled ? "Stop annotating" : "Start annotating"}
         </button>
-        <button aria-disabled disabled style={secondaryButtonStyle} type="button">
-          Export soon
+        <button
+          aria-expanded={panelOpen}
+          onClick={onTogglePanel}
+          style={panelOpen ? activeSecondaryButtonStyle : secondaryButtonStyle}
+          type="button">
+          {panelOpen ? "Hide annotations" : "Show annotations"}
         </button>
       </div>
     </div>

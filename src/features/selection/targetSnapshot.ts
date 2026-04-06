@@ -13,24 +13,20 @@ export interface TargetCandidate {
   snapshot: TargetSnapshot
 }
 
-const buildRectSnapshot = (element: Element) => {
-  const rect = element.getBoundingClientRect()
-
-  return {
-    top: rect.top,
-    left: rect.left,
-    width: rect.width,
-    height: rect.height
-  }
-}
-
 export const buildTargetSnapshot = (
   element: Element,
   options: TargetSnapshotOptions = {}
 ): TargetSnapshot => {
   if (!options.includeMetadata) {
+    const rect = element.getBoundingClientRect()
+
     return {
-      rect: buildRectSnapshot(element),
+      rect: {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height
+      },
       selector: null,
       label: null,
       contextText: null
