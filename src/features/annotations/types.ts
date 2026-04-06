@@ -39,3 +39,14 @@ export interface AnnotationInput {
   tag: AnnotationTag | null
   feedback: string
 }
+
+export interface PageAnnotationsStore {
+  version: 1
+  pageKey: string
+  pageUrl: string
+  annotations: Annotation[]
+  updatedAt: string
+}
+
+export type AnnotationRecord = Annotation
+export type AnnotationTarget = TargetSnapshot
