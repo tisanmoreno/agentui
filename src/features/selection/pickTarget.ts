@@ -7,7 +7,8 @@ import {
 } from "~src/features/selection/selectionGuards"
 import {
   createTargetCandidate,
-  type TargetCandidate
+  type TargetCandidate,
+  type TargetSnapshotOptions
 } from "~src/features/selection/targetSnapshot"
 
 const MAX_ANCESTOR_DEPTH = 6
@@ -192,7 +193,10 @@ const getCandidateScore = (candidate: Element, rawTarget: Element, depth: number
   return score
 }
 
-export const pickTarget = (target: EventTarget | null): TargetCandidate | null => {
+export const pickTarget = (
+  target: EventTarget | null,
+  metadataOptions: TargetSnapshotOptions = {}
+): TargetCandidate | null => {
   const rawElement = getEventTargetElement(target)
 
   if (!rawElement) {
@@ -227,5 +231,5 @@ export const pickTarget = (target: EventTarget | null): TargetCandidate | null =
     }
   )
 
-  return createTargetCandidate(bestCandidate.element)
+  return createTargetCandidate(bestCandidate.element, metadataOptions)
 }

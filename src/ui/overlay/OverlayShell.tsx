@@ -109,20 +109,26 @@ export const OverlayShell = () => {
         return
       }
 
-      if (popoverState.mode === "create") {
-        addAnnotation({
-          target: popoverState.target.snapshot,
-          tag: input.tag,
-          feedback: input.feedback
-        })
-      } else {
-        updateAnnotation(popoverState.annotation.id, {
-          tag: input.tag,
-          feedback: input.feedback
-        })
-      }
+      void (async () => {
+        try {
+          if (popoverState.mode === "create") {
+            await addAnnotation({
+              target: popoverState.target.snapshot,
+              tag: input.tag,
+              feedback: input.feedback
+            })
+          } else {
+            await updateAnnotation(popoverState.annotation.id, {
+              tag: input.tag,
+              feedback: input.feedback
+            })
+          }
 
-      setPopoverState(closedPopoverState)
+          setPopoverState(closedPopoverState)
+        } catch (error) {
+          console.error("Failed to save annotation", error)
+        }
+      })()
     },
     [addAnnotation, popoverState, updateAnnotation]
   )

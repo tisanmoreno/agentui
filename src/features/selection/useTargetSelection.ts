@@ -3,13 +3,22 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { areRectsNearlyEqual, rectContainsPoint } from "~src/shared/dom"
 
 import { pickTarget } from "~src/features/selection/pickTarget"
-import { isAgentUIElement } from "~src/features/selection/selectionGuards"
+import {
+  getEventTargetElement,
+  isAgentUIElement
+} from "~src/features/selection/selectionGuards"
 import type { TargetCandidate } from "~src/features/selection/targetSnapshot"
 
 interface UseTargetSelectionOptions {
   enabled: boolean
   paused?: boolean
   onSelectTarget: (candidate: TargetCandidate) => void
+}
+
+const getCurrentSelectionText = () => {
+  const selectedText = window.getSelection()?.toString().trim() ?? ""
+
+  return selectedText || null
 }
 
 const getStableCandidate = (
@@ -50,6 +59,7 @@ export const useTargetSelection = ({
 }: UseTargetSelectionOptions) => {
   const [hoveredTarget, setHoveredTarget] = useState<TargetCandidate | null>(null)
   const hoveredTargetRef = useRef<TargetCandidate | null>(null)
+  const selectedTextRef = useRef<string | null>(null)
 
   useEffect(() => {
     hoveredTargetRef.current = hoveredTarget
@@ -57,6 +67,7 @@ export const useTargetSelection = ({
 
   const clearHoveredTarget = useCallback(() => {
     hoveredTargetRef.current = null
+    selectedTextRef.current = null
     setHoveredTarget(null)
   }, [])
 
@@ -93,12 +104,27 @@ export const useTargetSelection = ({
       }
     }
 
+    const handlePointerDownCapture = (event: PointerEvent) => {
+      if (!enabled || paused) {
+        return
+      }
+
+      const targetElement = getEventTargetElement(event.target)
+
+      if (isAgentUIElement(targetElement)) {
+        selectedTextRef.current = null
+        return
+      }
+
+      selectedTextRef.current = getCurrentSelectionText()
+    }
+
     const handleClickCapture = (event: MouseEvent) => {
       if (!enabled) {
         return
       }
 
-      const targetElement = event.target instanceof Element ? event.target : null
+      const targetElement = getEventTargetElement(event.target)
 
       if (isAgentUIElement(targetElement)) {
         return
@@ -111,7 +137,12 @@ export const useTargetSelection = ({
         return
       }
 
-      const candidate = pickTarget(event.target)
+      const candidate = pickTarget(event.target, {
+        includeMetadata: true,
+        selectedText: selectedTextRef.current ?? getCurrentSelectionText()
+      })
+
+      selectedTextRef.current = null
 
       if (!candidate) {
         return
@@ -128,11 +159,13 @@ export const useTargetSelection = ({
 
     document.addEventListener("pointermove", handlePointerMove, true)
     document.addEventListener("pointerleave", handlePointerLeave, true)
+    document.addEventListener("pointerdown", handlePointerDownCapture, true)
     document.addEventListener("click", handleClickCapture, true)
 
     return () => {
       document.removeEventListener("pointermove", handlePointerMove, true)
       document.removeEventListener("pointerleave", handlePointerLeave, true)
+      document.removeEventListener("pointerdown", handlePointerDownCapture, true)
       document.removeEventListener("click", handleClickCapture, true)
     }
   }, [clearHoveredTarget, enabled, onSelectTarget, paused])
