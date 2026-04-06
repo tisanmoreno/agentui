@@ -3,9 +3,11 @@ import type { CSSProperties } from "react"
 const toolbarStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "10px",
+  gap: "12px",
+  flexWrap: "wrap",
+  maxWidth: "min(calc(100vw - 32px), 720px)",
   padding: "10px 12px",
-  borderRadius: "999px",
+  borderRadius: "20px",
   border: "1px solid rgba(148, 163, 184, 0.24)",
   background: "rgba(15, 23, 42, 0.94)",
   boxShadow: "0 12px 32px rgba(15, 23, 42, 0.35)",
@@ -31,7 +33,8 @@ const metaStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "2px",
-  minWidth: "0"
+  minWidth: "0",
+  flex: "1 1 auto"
 }
 
 const titleStyle: CSSProperties = {
@@ -49,7 +52,9 @@ const statusStyle: CSSProperties = {
 const actionsStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "8px"
+  gap: "8px",
+  flexWrap: "wrap",
+  justifyContent: "flex-end"
 }
 
 const baseButtonStyle: CSSProperties = {
@@ -62,14 +67,14 @@ const baseButtonStyle: CSSProperties = {
   transition: "background-color 120ms ease, color 120ms ease, border-color 120ms ease"
 }
 
-const toggleOnStyle: CSSProperties = {
+const primaryButtonStyle: CSSProperties = {
   ...baseButtonStyle,
   background: "#2563eb",
   borderColor: "rgba(96, 165, 250, 0.7)",
   color: "#eff6ff"
 }
 
-const toggleOffStyle: CSSProperties = {
+const neutralButtonStyle: CSSProperties = {
   ...baseButtonStyle,
   background: "rgba(255, 255, 255, 0.08)",
   borderColor: "rgba(148, 163, 184, 0.24)",
@@ -79,7 +84,7 @@ const toggleOffStyle: CSSProperties = {
 const secondaryButtonStyle: CSSProperties = {
   ...baseButtonStyle,
   background: "rgba(255, 255, 255, 0.06)",
-  borderColor: "rgba(148, 163, 184, 0.18)",
+  borderColor: "rgba(148, 163, 184, 0.24)",
   color: "#e2e8f0"
 }
 
@@ -90,22 +95,36 @@ const activeSecondaryButtonStyle: CSSProperties = {
   color: "#dbeafe"
 }
 
+const disabledButtonStyle: CSSProperties = {
+  ...secondaryButtonStyle,
+  color: "rgba(248, 250, 252, 0.56)",
+  cursor: "not-allowed"
+}
+
 interface FeedbackToolbarProps {
   annotationCount: number
+  canCopyAnnotations: boolean
   feedbackModeEnabled: boolean
   panelOpen: boolean
+  onCopyCompact: () => void
+  onCopyDetailed: () => void
   onToggleFeedbackMode: () => void
   onTogglePanel: () => void
 }
 
 export const FeedbackToolbar = ({
   annotationCount,
+  canCopyAnnotations,
   feedbackModeEnabled,
   panelOpen,
+  onCopyCompact,
+  onCopyDetailed,
   onToggleFeedbackMode,
   onTogglePanel
 }: FeedbackToolbarProps) => {
   const countLabel = annotationCount === 1 ? "1 note" : `${annotationCount} notes`
+  const copyButtonStyle = canCopyAnnotations ? primaryButtonStyle : disabledButtonStyle
+  const detailedButtonStyle = canCopyAnnotations ? secondaryButtonStyle : disabledButtonStyle
 
   return (
     <div aria-label="AgentUI toolbar" style={toolbarStyle}>
@@ -120,7 +139,8 @@ export const FeedbackToolbar = ({
         <button
           aria-pressed={feedbackModeEnabled}
           onClick={onToggleFeedbackMode}
-          style={feedbackModeEnabled ? toggleOnStyle : toggleOffStyle}
+          style={feedbackModeEnabled ? primaryButtonStyle : neutralButtonStyle}
+          title="Toggle feedback mode (Alt+Shift+A)"
           type="button">
           {feedbackModeEnabled ? "Stop annotating" : "Start annotating"}
         </button>
@@ -130,6 +150,24 @@ export const FeedbackToolbar = ({
           style={panelOpen ? activeSecondaryButtonStyle : secondaryButtonStyle}
           type="button">
           {panelOpen ? "Hide annotations" : "Show annotations"}
+        </button>
+        <button
+          aria-disabled={!canCopyAnnotations}
+          disabled={!canCopyAnnotations}
+          onClick={onCopyCompact}
+          style={copyButtonStyle}
+          title="Copy compact feedback (Alt+Shift+C)"
+          type="button">
+          Copy compact
+        </button>
+        <button
+          aria-disabled={!canCopyAnnotations}
+          disabled={!canCopyAnnotations}
+          onClick={onCopyDetailed}
+          style={detailedButtonStyle}
+          title="Copy detailed feedback"
+          type="button">
+          Copy detailed
         </button>
       </div>
     </div>

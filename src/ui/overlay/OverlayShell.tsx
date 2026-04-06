@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties
+} from "react"
 
 import {
-  AGENTUI_IGNORE_TARGET_ATTRIBUTE,
-  AGENTUI_Z_INDEX,
-  TOOLBAR_OFFSET
-} from "~src/shared/constants"
-
+  copyCompactAnnotations,
+  copyDetailedAnnotations,
+  hasExportableAnnotations,
+  type CopyAnnotationsResult,
+  type ExportFormat
+} from "~src/export/serializers"
 import { AnnotationPanel } from "~src/features/annotations/components/AnnotationPanel"
 import { MarkerLayer } from "~src/features/annotations/components/MarkerLayer"
 import { useMarkerPositions } from "~src/features/annotations/hooks/useMarkerPositions"
@@ -13,9 +21,23 @@ import type { Annotation, RectSnapshot } from "~src/features/annotations/types"
 import { useAnnotationsState } from "~src/features/annotations/useAnnotationsState"
 import { useTargetSelection } from "~src/features/selection/useTargetSelection"
 import type { TargetCandidate } from "~src/features/selection/targetSnapshot"
+import {
+  AGENTUI_IGNORE_TARGET_ATTRIBUTE,
+  AGENTUI_Z_INDEX,
+  TOOLBAR_OFFSET
+} from "~src/shared/constants"
+import { isTypingInEditableTarget } from "~src/shared/keyboard"
 import { AnnotationPopover } from "~src/ui/overlay/AnnotationPopover"
 import { HoverOutline } from "~src/ui/overlay/HoverOutline"
+import {
+  ToastRegion,
+  type ToastItem,
+  type ToastTone
+} from "~src/ui/overlay/ToastRegion"
 import { FeedbackToolbar } from "~src/ui/toolbar/FeedbackToolbar"
+
+const TOAST_DURATION_MS = 1800
+const MAX_VISIBLE_TOASTS = 3
 
 const overlayStyle: CSSProperties = {
   position: "fixed",
@@ -43,11 +65,21 @@ type PopoverState =
 
 const closedPopoverState: PopoverState = { open: false }
 
+const createToastId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+
+  return `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 export const OverlayShell = () => {
   const [feedbackModeEnabled, setFeedbackModeEnabled] = useState(false)
   const [markersVisible, setMarkersVisible] = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [popoverState, setPopoverState] = useState<PopoverState>(closedPopoverState)
+  const [toasts, setToasts] = useState<ToastItem[]>([])
+  const toastTimersRef = useRef<Map<string, number>>(new Map())
   const {
     annotations,
     activeAnnotationId,
@@ -71,6 +103,59 @@ export const OverlayShell = () => {
       ),
     [resolvedAnnotations]
   )
+
+  const dismissToast = useCallback((toastId: string) => {
+    const timeoutId = toastTimersRef.current.get(toastId)
+
+    if (typeof timeoutId === "number") {
+      window.clearTimeout(timeoutId)
+      toastTimersRef.current.delete(toastId)
+    }
+
+    setToasts((currentToasts) =>
+      currentToasts.filter((toast) => toast.id !== toastId)
+    )
+  }, [])
+
+  const showToast = useCallback(
+    (tone: ToastTone, message: string) => {
+      const toastId = createToastId()
+
+      setToasts((currentToasts) => {
+        const nextToasts = [...currentToasts, { id: toastId, tone, message }]
+        const overflowCount = Math.max(0, nextToasts.length - MAX_VISIBLE_TOASTS)
+
+        if (overflowCount > 0) {
+          nextToasts.slice(0, overflowCount).forEach((toast) => {
+            const overflowTimeoutId = toastTimersRef.current.get(toast.id)
+
+            if (typeof overflowTimeoutId === "number") {
+              window.clearTimeout(overflowTimeoutId)
+              toastTimersRef.current.delete(toast.id)
+            }
+          })
+        }
+
+        return nextToasts.slice(-MAX_VISIBLE_TOASTS)
+      })
+
+      const timeoutId = window.setTimeout(() => {
+        dismissToast(toastId)
+      }, TOAST_DURATION_MS)
+
+      toastTimersRef.current.set(toastId, timeoutId)
+    },
+    [dismissToast]
+  )
+
+  useEffect(() => {
+    return () => {
+      toastTimersRef.current.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId)
+      })
+      toastTimersRef.current.clear()
+    }
+  }, [])
 
   const handleSelectTarget = useCallback((candidate: TargetCandidate) => {
     setPopoverState({
@@ -123,17 +208,62 @@ export const OverlayShell = () => {
     clearActiveAnnotation()
   }, [clearActiveAnnotation])
 
+  const exitFeedbackMode = useCallback(() => {
+    setFeedbackModeEnabled(false)
+    setPopoverState(closedPopoverState)
+    clearActiveAnnotation()
+    clearHoveredTarget()
+  }, [clearActiveAnnotation, clearHoveredTarget])
+
   const handleToggleFeedbackMode = useCallback(() => {
     if (feedbackModeEnabled) {
-      setFeedbackModeEnabled(false)
-      setPopoverState(closedPopoverState)
-      clearActiveAnnotation()
-      clearHoveredTarget()
+      exitFeedbackMode()
       return
     }
 
     setFeedbackModeEnabled(true)
-  }, [clearActiveAnnotation, clearHoveredTarget, feedbackModeEnabled])
+  }, [exitFeedbackMode, feedbackModeEnabled])
+
+  const canCopyAnnotations = useMemo(
+    () => hasExportableAnnotations(annotations),
+    [annotations]
+  )
+
+  const getCopySuccessMessage = useCallback(
+    ({ format, annotationCount }: Pick<CopyAnnotationsResult, "format" | "annotationCount">) => {
+      const noun = annotationCount === 1 ? "annotation" : "annotations"
+
+      return `Copied ${format} feedback (${annotationCount} ${noun})`
+    },
+    []
+  )
+
+  const handleCopyAnnotations = useCallback(
+    async (format: ExportFormat) => {
+      try {
+        const copyResult =
+          format === "detailed"
+            ? await copyDetailedAnnotations(annotations, {
+                pageTitle: document.title,
+                pageUrl: window.location.href
+              })
+            : await copyCompactAnnotations(annotations, {
+                pageTitle: document.title,
+                pageUrl: window.location.href
+              })
+
+        if (!copyResult) {
+          showToast("info", "No annotations to copy")
+          return
+        }
+
+        showToast("success", getCopySuccessMessage(copyResult))
+      } catch {
+        showToast("error", "Copy failed — try again")
+      }
+    },
+    [annotations, getCopySuccessMessage, showToast]
+  )
 
   const handleEditAnnotation = useCallback(
     (annotation: Annotation, anchorRect?: RectSnapshot | null) => {
@@ -193,26 +323,50 @@ export const OverlayShell = () => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
+      if (event.isComposing) {
         return
       }
 
-      if (popoverState.open) {
+      if (event.key === "Escape") {
+        if (popoverState.open) {
+          event.preventDefault()
+          event.stopPropagation()
+          handleClosePopover()
+          return
+        }
+
+        if (!feedbackModeEnabled) {
+          return
+        }
+
         event.preventDefault()
         event.stopPropagation()
-        setPopoverState(closedPopoverState)
+        exitFeedbackMode()
         return
       }
 
-      if (!feedbackModeEnabled) {
+      if (isTypingInEditableTarget(event.target)) {
         return
       }
 
-      event.preventDefault()
-      event.stopPropagation()
-      setFeedbackModeEnabled(false)
-      clearHoveredTarget()
-      clearActiveAnnotation()
+      if (event.repeat || !event.altKey || !event.shiftKey) {
+        return
+      }
+
+      const normalizedKey = event.key.toLowerCase()
+
+      if (normalizedKey === "a") {
+        event.preventDefault()
+        event.stopPropagation()
+        handleToggleFeedbackMode()
+        return
+      }
+
+      if (normalizedKey === "c") {
+        event.preventDefault()
+        event.stopPropagation()
+        void handleCopyAnnotations("compact")
+      }
     }
 
     document.addEventListener("keydown", handleKeyDown, true)
@@ -220,7 +374,14 @@ export const OverlayShell = () => {
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true)
     }
-  }, [clearActiveAnnotation, clearHoveredTarget, feedbackModeEnabled, popoverState])
+  }, [
+    exitFeedbackMode,
+    feedbackModeEnabled,
+    handleClosePopover,
+    handleCopyAnnotations,
+    handleToggleFeedbackMode,
+    popoverState.open
+  ])
 
   return (
     <div
@@ -245,7 +406,10 @@ export const OverlayShell = () => {
       <div style={toolbarPositionStyle}>
         <FeedbackToolbar
           annotationCount={annotations.length}
+          canCopyAnnotations={canCopyAnnotations}
           feedbackModeEnabled={feedbackModeEnabled}
+          onCopyCompact={() => void handleCopyAnnotations("compact")}
+          onCopyDetailed={() => void handleCopyAnnotations("detailed")}
           onToggleFeedbackMode={handleToggleFeedbackMode}
           onTogglePanel={() => setPanelOpen((currentValue) => !currentValue)}
           panelOpen={panelOpen}
@@ -279,6 +443,7 @@ export const OverlayShell = () => {
         open={popoverState.open}
         targetLabel={targetLabel}
       />
+      <ToastRegion toasts={toasts} />
     </div>
   )
 }
