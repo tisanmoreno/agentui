@@ -1,11 +1,11 @@
-import type { AnnotationRecord } from "~src/features/annotations/types"
+import type { Annotation } from "~src/features/annotations/types"
 
 export interface SerializedAnnotationsPayload {
   version: 1
-  annotations: AnnotationRecord[]
+  annotations: Annotation[]
 }
 
-export const serializeAnnotations = (annotations: AnnotationRecord[]) => {
+export const serializeAnnotations = (annotations: Annotation[]) => {
   const payload: SerializedAnnotationsPayload = {
     version: 1,
     annotations

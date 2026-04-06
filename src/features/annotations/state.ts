@@ -1,7 +1,7 @@
-import type { AnnotationRecord } from "~src/features/annotations/types"
+import type { Annotation } from "~src/features/annotations/types"
 
 export interface AnnotationState {
-  annotations: AnnotationRecord[]
+  annotations: Annotation[]
   activeAnnotationId: string | null
 }
 
