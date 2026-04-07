@@ -24,6 +24,7 @@ import type { TargetCandidate } from "~src/features/selection/targetSnapshot"
 import {
   AGENTUI_IGNORE_TARGET_ATTRIBUTE,
   AGENTUI_Z_INDEX,
+  DEFAULT_OVERLAY_VISIBLE,
   TOOLBAR_OFFSET
 } from "~src/shared/constants"
 import { isTypingInEditableTarget } from "~src/shared/keyboard"
@@ -87,7 +88,7 @@ const createToastId = () => {
 export const OverlayShell = () => {
   const [feedbackModeEnabled, setFeedbackModeEnabled] = useState(false)
   const [markersVisible, setMarkersVisible] = useState(true)
-  const [overlayVisible, setOverlayVisible] = useState(true)
+  const [overlayVisible, setOverlayVisible] = useState(DEFAULT_OVERLAY_VISIBLE)
   const [overlayVisibilityReady, setOverlayVisibilityReady] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [annotationPanelTopOffset, setAnnotationPanelTopOffset] = useState(
@@ -309,7 +310,7 @@ export const OverlayShell = () => {
         return
       }
 
-      applyOverlayVisibility(response?.visible ?? true)
+      applyOverlayVisibility(response?.visible ?? DEFAULT_OVERLAY_VISIBLE)
       setOverlayVisibilityReady(true)
     })
 

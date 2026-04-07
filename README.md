@@ -73,8 +73,8 @@ http://localhost:3000
 5. Select `build/chrome-mv3-dev`.
 6. Confirm the **AgentUI** extension card appears without manifest errors.
 7. Open your local page, such as `http://localhost:3000`.
-8. Confirm the floating AgentUI toolbar appears in the top-right corner.
-9. Optionally click the pinned AgentUI extension button to hide or show the overlay on the current tab.
+8. Confirm the AgentUI overlay is hidden by default.
+9. Click the pinned AgentUI extension button to show or hide the overlay on the current tab.
 
 After code changes:
 
@@ -86,7 +86,7 @@ After code changes:
 
 ### 1. Start annotating
 
-If you hid the overlay, click the pinned AgentUI extension button to show it again on the current tab. Then click **Start annotating** in the toolbar.
+Click the pinned AgentUI extension button to show the overlay on the current tab. Then click **Start annotating** in the toolbar.
 
 ### 2. Pick a target
 
@@ -161,7 +161,7 @@ Use [`docs/manual-qa.md`](docs/manual-qa.md) before merging UI changes or updati
 
 ## Troubleshooting
 
-- **No toolbar on the page**: make sure the extension is loaded from `build/chrome-mv3-dev`, then reload the extension card and refresh the page.
+- **No toolbar on the page**: AgentUI starts hidden by default. Click the pinned AgentUI extension button first. If it still does not appear, make sure the extension is loaded from `build/chrome-mv3-dev`, then reload the extension card and refresh the page.
 - **Wrong folder selected in Chrome**: choose the generated build folder, not the repo root.
 - **No local page to test with**: start any frontend separately and use its localhost URL.
 - **Clicking the page does nothing**: make sure feedback mode is on before selecting a target.

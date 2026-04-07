@@ -1,3 +1,4 @@
+import { DEFAULT_OVERLAY_VISIBLE } from "~src/shared/constants"
 import {
   GET_OVERLAY_VISIBILITY_MESSAGE,
   SET_OVERLAY_VISIBILITY_MESSAGE,
@@ -67,7 +68,7 @@ const getOverlayVisibilityByTab = async (): Promise<OverlayVisibilityByTab> => {
 const getOverlayVisibilityForTab = async (tabId: number) => {
   const visibilityByTab = await getOverlayVisibilityByTab()
 
-  return visibilityByTab[String(tabId)] ?? true
+  return visibilityByTab[String(tabId)] ?? DEFAULT_OVERLAY_VISIBLE
 }
 
 const setOverlayVisibilityForTab = async (tabId: number, visible: boolean) => {
@@ -156,7 +157,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
       const visible =
         typeof sender.tab?.id === "number"
           ? await getOverlayVisibilityForTab(sender.tab.id)
-          : true
+          : DEFAULT_OVERLAY_VISIBLE
 
       if (typeof sender.tab?.id === "number") {
         await setActionIconForTab(sender.tab.id, visible)
@@ -166,7 +167,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
       sendResponse(response)
     } catch (error) {
       console.error("AgentUI: failed to resolve overlay visibility", error)
-      sendResponse({ visible: true } satisfies GetOverlayVisibilityResponse)
+      sendResponse({ visible: DEFAULT_OVERLAY_VISIBLE } satisfies GetOverlayVisibilityResponse)
     }
   })()
 
