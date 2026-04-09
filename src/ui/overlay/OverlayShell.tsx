@@ -4,7 +4,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent
 } from "react"
 
 import {
@@ -25,7 +26,8 @@ import {
   AGENTUI_IGNORE_TARGET_ATTRIBUTE,
   AGENTUI_Z_INDEX,
   DEFAULT_OVERLAY_VISIBLE,
-  TOOLBAR_OFFSET
+  TOOLBAR_OFFSET,
+  VIEWPORT_PADDING
 } from "~src/shared/constants"
 import { isTypingInEditableTarget } from "~src/shared/keyboard"
 import {
@@ -65,6 +67,29 @@ const toolbarPositionStyle: CSSProperties = {
   pointerEvents: "auto"
 }
 
+type ToolbarPosition = {
+  left: number
+  top: number
+}
+
+type ToolbarSize = {
+  height: number
+  width: number
+}
+
+const clampToolbarPosition = (
+  position: ToolbarPosition,
+  size: ToolbarSize
+): ToolbarPosition => {
+  const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - size.width - VIEWPORT_PADDING)
+  const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - size.height - VIEWPORT_PADDING)
+
+  return {
+    left: Math.round(Math.min(Math.max(position.left, VIEWPORT_PADDING), maxLeft)),
+    top: Math.round(Math.min(Math.max(position.top, VIEWPORT_PADDING), maxTop))
+  }
+}
+
 type PopoverState =
   | { open: false }
   | { open: true; mode: "create"; target: TargetCandidate }
@@ -91,6 +116,13 @@ export const OverlayShell = () => {
   const [overlayVisible, setOverlayVisible] = useState(DEFAULT_OVERLAY_VISIBLE)
   const [overlayVisibilityReady, setOverlayVisibilityReady] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [toolbarMinimized, setToolbarMinimized] = useState(false)
+  const [toolbarDragging, setToolbarDragging] = useState(false)
+  const [toolbarPosition, setToolbarPosition] = useState<ToolbarPosition | null>(null)
+  const [toolbarSize, setToolbarSize] = useState<ToolbarSize>({
+    height: 0,
+    width: 0
+  })
   const [annotationPanelTopOffset, setAnnotationPanelTopOffset] = useState(
     DEFAULT_PANEL_TOP_OFFSET
   )
@@ -99,6 +131,7 @@ export const OverlayShell = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const toastTimersRef = useRef<Map<string, number>>(new Map())
   const revealTimerRef = useRef<number | null>(null)
+  const toolbarDragOffsetRef = useRef<{ x: number; y: number } | null>(null)
   const toolbarRef = useRef<HTMLDivElement | null>(null)
   const {
     annotations,
@@ -448,6 +481,44 @@ export const OverlayShell = () => {
     [resolvedAnnotationsById]
   )
 
+  const handleToggleToolbarMinimized = useCallback(() => {
+    setToolbarMinimized((currentValue) => {
+      const nextValue = !currentValue
+
+      if (nextValue) {
+        setPanelOpen(false)
+      }
+
+      return nextValue
+    })
+  }, [])
+
+  const handleStartToolbarDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return
+      }
+
+      const toolbarElement = toolbarRef.current
+
+      if (!toolbarElement) {
+        return
+      }
+
+      const toolbarRect = toolbarElement.getBoundingClientRect()
+
+      toolbarDragOffsetRef.current = {
+        x: event.clientX - toolbarRect.left,
+        y: event.clientY - toolbarRect.top
+      }
+
+      setToolbarDragging(true)
+      event.preventDefault()
+      event.stopPropagation()
+    },
+    []
+  )
+
   useEffect(() => {
     if (!overlayVisibilityReady || !overlayVisible) {
       return
@@ -459,26 +530,129 @@ export const OverlayShell = () => {
       return
     }
 
-    const updateAnnotationPanelTopOffset = () => {
+    const updateToolbarMetrics = () => {
       const toolbarRect = toolbarElement.getBoundingClientRect()
+      const nextSize = {
+        height: Math.round(toolbarRect.height),
+        width: Math.round(toolbarRect.width)
+      }
 
-      setAnnotationPanelTopOffset(Math.round(toolbarRect.bottom + PANEL_GAP))
+      setToolbarSize((currentSize) =>
+        currentSize.height === nextSize.height && currentSize.width === nextSize.width
+          ? currentSize
+          : nextSize
+      )
+
+      setToolbarPosition((currentPosition) => {
+        const basePosition =
+          currentPosition ??
+          clampToolbarPosition(
+            {
+              left: Math.round(toolbarRect.left),
+              top: Math.round(toolbarRect.top)
+            },
+            nextSize
+          )
+
+        const nextPosition = clampToolbarPosition(basePosition, nextSize)
+
+        if (
+          currentPosition &&
+          currentPosition.left === nextPosition.left &&
+          currentPosition.top === nextPosition.top
+        ) {
+          return currentPosition
+        }
+
+        return nextPosition
+      })
     }
 
-    updateAnnotationPanelTopOffset()
+    updateToolbarMetrics()
 
     const resizeObserver = new ResizeObserver(() => {
-      updateAnnotationPanelTopOffset()
+      updateToolbarMetrics()
     })
 
     resizeObserver.observe(toolbarElement)
-    window.addEventListener("resize", updateAnnotationPanelTopOffset)
+    window.addEventListener("resize", updateToolbarMetrics)
 
     return () => {
       resizeObserver.disconnect()
-      window.removeEventListener("resize", updateAnnotationPanelTopOffset)
+      window.removeEventListener("resize", updateToolbarMetrics)
     }
   }, [overlayVisibilityReady, overlayVisible])
+
+  useEffect(() => {
+    if (!toolbarPosition || toolbarSize.height <= 0) {
+      return
+    }
+
+    const nextTopOffset = Math.round(toolbarPosition.top + toolbarSize.height + PANEL_GAP)
+
+    setAnnotationPanelTopOffset((currentValue) =>
+      currentValue === nextTopOffset ? currentValue : nextTopOffset
+    )
+  }, [toolbarPosition, toolbarSize.height])
+
+  useEffect(() => {
+    if (!toolbarDragging) {
+      return
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const dragOffset = toolbarDragOffsetRef.current
+
+      if (!dragOffset) {
+        return
+      }
+
+      const fallbackRect = toolbarRef.current?.getBoundingClientRect()
+      const nextSize = {
+        height: toolbarSize.height || Math.round(fallbackRect?.height ?? 0),
+        width: toolbarSize.width || Math.round(fallbackRect?.width ?? 0)
+      }
+
+      const nextPosition = clampToolbarPosition(
+        {
+          left: event.clientX - dragOffset.x,
+          top: event.clientY - dragOffset.y
+        },
+        nextSize
+      )
+
+      setToolbarPosition((currentPosition) => {
+        if (
+          currentPosition &&
+          currentPosition.left === nextPosition.left &&
+          currentPosition.top === nextPosition.top
+        ) {
+          return currentPosition
+        }
+
+        return nextPosition
+      })
+    }
+
+    const stopDragging = () => {
+      toolbarDragOffsetRef.current = null
+      setToolbarDragging(false)
+    }
+
+    const previousUserSelect = document.body.style.userSelect
+
+    document.body.style.userSelect = "none"
+    window.addEventListener("pointermove", handlePointerMove, true)
+    window.addEventListener("pointerup", stopDragging, true)
+    window.addEventListener("pointercancel", stopDragging, true)
+
+    return () => {
+      document.body.style.userSelect = previousUserSelect
+      window.removeEventListener("pointermove", handlePointerMove, true)
+      window.removeEventListener("pointerup", stopDragging, true)
+      window.removeEventListener("pointercancel", stopDragging, true)
+    }
+  }, [toolbarDragging, toolbarSize.height, toolbarSize.width])
 
   useEffect(() => {
     if (!overlayVisibilityReady || !overlayVisible) {
@@ -553,6 +727,19 @@ export const OverlayShell = () => {
       ? resolvedAnnotationsById.get(revealedAnnotationId)?.rect ?? null
       : null
 
+  const resolvedToolbarPositionStyle = useMemo<CSSProperties>(() => {
+    if (!toolbarPosition) {
+      return toolbarPositionStyle
+    }
+
+    return {
+      ...toolbarPositionStyle,
+      left: toolbarPosition.left,
+      right: "auto",
+      top: toolbarPosition.top
+    }
+  }, [toolbarPosition])
+
   if (!overlayVisibilityReady || !overlayVisible) {
     return null
   }
@@ -578,14 +765,18 @@ export const OverlayShell = () => {
           onEditAnnotation={handleEditAnnotation}
         />
       ) : null}
-      <div ref={toolbarRef} style={toolbarPositionStyle}>
+      <div ref={toolbarRef} style={resolvedToolbarPositionStyle}>
         <FeedbackToolbar
           annotationCount={annotations.length}
           canCopyAnnotations={canCopyAnnotations}
+          dragging={toolbarDragging}
           feedbackModeEnabled={feedbackModeEnabled}
+          minimized={toolbarMinimized}
           onCopyCompact={() => void handleCopyAnnotations("compact")}
           onCopyDetailed={() => void handleCopyAnnotations("detailed")}
+          onStartDrag={handleStartToolbarDrag}
           onToggleFeedbackMode={handleToggleFeedbackMode}
+          onToggleMinimized={handleToggleToolbarMinimized}
           onTogglePanel={() => setPanelOpen((currentValue) => !currentValue)}
           panelOpen={panelOpen}
         />
